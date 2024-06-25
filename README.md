@@ -239,4 +239,194 @@ Cost of Type II error - You erroneously presume that the transaction is not a fr
 #area under curve
 roc_auc_score(valid_df[target].values, preds)
 pip install xgboost
+pip install lightgbm
+pip install catboost 
+from catboost import CatBoostClassifier
+from sklearn import svm
+import lightgbm as lgb
+from lightgbm import LGBMClassifier
+import xgboost as xgb
+clf = AdaBoostClassifier(random_state=RANDOM_STATE,
+                         algorithm='SAMME.R',
+                         learning_rate=0.8,
+                             n_estimators=NUM_ESTIMATORS)
+                             clf.fit(train_df[predictors], train_df[target].values)
+
+                        preds = clf.predict(valid_df[predictors])
+                        tmp = pd.DataFrame({'Feature': predictors, 'Feature importance': clf.feature_importances_})
+tmp = tmp.sort_values(by='Feature importance',ascending=False)
+plt.figure(figsize = (7,4))
+plt.title('Features importance',fontsize=14)
+s = sns.barplot(x='Feature',y='Feature importance',data=tmp)
+s.set_xticklabels(s.get_xticklabels(),rotation=90)
+plt.show() 
+cm = pd.crosstab(valid_df[target].values, preds, rownames=['Actual'], colnames=['Predicted'])
+fig, (ax1) = plt.subplots(ncols=1, figsize=(5,5))
+sns.heatmap(cm, 
+            xticklabels=['Not Fraud', 'Fraud'],
+            yticklabels=['Not Fraud', 'Fraud'],
+            annot=True,ax=ax1,
+            linewidths=.2,linecolor="Darkblue", cmap="Blues")
+plt.title('Confusion Matrix', fontsize=14)
+plt.show()
+roc_auc_score(valid_df[target].values, preds)
+clf = CatBoostClassifier(iterations=500,
+                             learning_rate=0.02,
+                             depth=12,
+                             eval_metric='AUC',
+                             random_seed = RANDOM_STATE,
+                             bagging_temperature = 0.2,
+                             od_type='Iter',
+                             metric_period = VERBOSE_EVAL,
+                             od_wait=100)
+clf.fit(train_df[predictors], train_df[target].values,verbose=True)
+preds = clf.predict(valid_df[predictors])
+tmp = pd.DataFrame({'Feature': predictors, 'Feature importance': clf.feature_importances_})
+tmp = tmp.sort_values(by='Feature importance',ascending=False)
+plt.figure(figsize = (7,4))
+plt.title('Features importance',fontsize=14)
+s = sns.barplot(x='Feature',y='Feature importance',data=tmp)
+s.set_xticklabels(s.get_xticklabels(),rotation=90)
+plt.show()  
+cm = pd.crosstab(valid_df[target].values, preds, rownames=['Actual'], colnames=['Predicted'])
+fig, (ax1) = plt.subplots(ncols=1, figsize=(5,5))
+sns.heatmap(cm, 
+            xticklabels=['Not Fraud', 'Fraud'],
+            yticklabels=['Not Fraud', 'Fraud'],
+            annot=True,ax=ax1,
+            linewidths=.2,linecolor="Darkblue", cmap="Blues")
+plt.title('Confusion Matrix', fontsize=14)
+plt.show()
+roc_auc_score(valid_df[target].values, preds)
+# Prepare the train and valid datasets
+dtrain = xgb.DMatrix(train_df[predictors], train_df[target].values)
+dvalid = xgb.DMatrix(valid_df[predictors], valid_df[target].values)
+dtest = xgb.DMatrix(test_df[predictors], test_df[target].values)
+
+#What to monitor (in this case, **train** and **valid**)
+watchlist = [(dtrain, 'train'), (dvalid, 'valid')]
+
+# Set xgboost parameters
+params = {}
+params['objective'] = 'binary:logistic'
+params['eta'] = 0.039
+params['silent'] = True
+params['max_depth'] = 2
+params['subsample'] = 0.8
+params['colsample_bytree'] = 0.9
+params['eval_metric'] = 'auc'
+params['random_state'] = RANDOM_STATE
+model = xgb.train(params, 
+                dtrain, 
+                MAX_ROUNDS, 
+                watchlist, 
+                early_stopping_rounds=EARLY_STOP, 
+                maximize=True, 
+                verbose_eval=VERBOSE_EVAL)
+                The best validation score (ROC-AUC) was 0.984, for round 241.
+                fig, (ax) = plt.subplots(ncols=1, figsize=(8,5))
+xgb.plot_importance(model, height=0.8, title="Features importance (XGBoost)", ax=ax, color="green") 
+plt.show()
+preds = model.predict(dtest)
+params = {
+          'boosting_type': 'gbdt',
+          'objective': 'binary',
+          'metric':'auc',
+          'learning_rate': 0.05,
+          'num_leaves': 7,  # we should let it be smaller than 2^(max_depth)
+          'max_depth': 4,  # -1 means no limit
+          'min_child_samples': 100,  # Minimum number of data need in a child(min_data_in_leaf)
+          'max_bin': 100,  # Number of bucketed bin for feature values
+          'subsample': 0.9,  # Subsample ratio of the training instance.
+          'subsample_freq': 1,  # frequence of subsample, <=0 means no enable
+          'colsample_bytree': 0.7,  # Subsample ratio of columns when constructing each tree.
+          'min_child_weight': 0,  # Minimum sum of instance weight(hessian) needed in a child(leaf)
+          'min_split_gain': 0,  # lambda_l1, lambda_l2 and min_gain_to_split to regularization
+          'nthread': 8,
+          'verbose': 0,
+          'scale_pos_weight':150, # because training data is extremely unbalanced 
+         }
+         dtrain = lgb.Dataset(train_df[predictors].values, 
+                     label=train_df[target].values,
+                     feature_name=predictors)
+
+dvalid = lgb.Dataset(valid_df[predictors].values,
+                     label=valid_df[target].values,
+                     feature_name=predictors)
+                     evals_results = {}
+
+model = lgb.train(params, 
+                  dtrain, 
+                  valid_sets=[dtrain, dvalid], 
+                  valid_names=['train','valid'], 
+                  num_boost_round=MAX_ROUNDS,
+                  feval=None)
+                  fig, (ax) = plt.subplots(ncols=1, figsize=(8,5))
+lgb.plot_importance(model, height=0.8, title="Features importance (LightGBM)", ax=ax,color="red") 
+plt.show()
+preds = model.predict(test_df[predictors])
+roc_auc_score(test_df[target].values, preds)
+kf = KFold(n_splits = NUMBER_KFOLDS, random_state = RANDOM_STATE, shuffle = True)
+
+# Create arrays and dataframes to store results
+oof_preds = np.zeros(train_df.shape[0])
+test_preds = np.zeros(test_df.shape[0])
+feature_importance_df = pd.DataFrame()
+n_fold = 0
+for train_idx, valid_idx in kf.split(train_df):
+    train_x, train_y = train_df[predictors].iloc[train_idx],train_df[target].iloc[train_idx]
+    valid_x, valid_y = train_df[predictors].iloc[valid_idx],train_df[target].iloc[valid_idx]
+    
+    evals_results = {}
+    model =  LGBMClassifier(
+                  nthread=-1,
+                  n_estimators=2000,
+                  learning_rate=0.01,
+                  num_leaves=80,
+                  colsample_bytree=0.98,
+                  subsample=0.78,
+                  reg_alpha=0.04,
+                  reg_lambda=0.073,
+                  subsample_for_bin=50,
+                  boosting_type='gbdt',
+                  is_unbalance=False,
+                  min_split_gain=0.025,
+                  min_child_weight=40,
+                  min_child_samples=510,
+                  objective='binary',
+                  metric='auc',
+                  silent=-1,
+                  verbose=-1,
+                  feval=None)
+                   model.fit(train_x, train_y, eval_set=[(train_x, train_y), (valid_x, valid_y)], 
+                eval_metric= 'auc')
+    
+    oof_preds[valid_idx] = model.predict_proba(valid_x, num_iteration=model.best_iteration_)[:, 1]
+    test_preds += model.predict_proba(test_df[predictors], num_iteration=model.best_iteration_)[:, 1] / kf.n_splits
+    
+    fold_importance_df = pd.DataFrame()
+    fold_importance_df["feature"] = predictors
+    fold_importance_df["importance"] = clf.feature_importances_
+    fold_importance_df["fold"] = n_fold + 1
+     
+    feature_importance_df = pd.concat([feature_importance_df, fold_importance_df], axis=0)
+    print('Fold %2d AUC : %.6f' % (n_fold + 1, roc_auc_score(valid_y, oof_preds[valid_idx])))
+    del model, train_x, train_y, valid_x, valid_y
+    gc.collect()
+    n_fold = n_fold + 1
+train_auc_score = roc_auc_score(train_df[target], oof_preds)
+print('Full AUC score %.6f' % train_auc_score)   
+pred = test_preds
+We investigated the data, checking for data unbalancing, visualizing the features and understanding the relationship between different features. We then investigated two predictive models. The data was split in 3 parts, a train set, a validation set and a test set. For the first three models, we only used the train and test set.
+
+We started with RandomForrestClassifier, for which we obtained an AUC scode of 0.85 when predicting the target for the test set.
+
+We followed with an AdaBoostClassifier model, with lower AUC score (0.83) for prediction of the test set target values.
+
+We then followed with an CatBoostClassifier, with the AUC score after training 500 iterations 0.86.
+
+We then experimented with a XGBoost model. In this case, se used the validation set for validation of the training model. The best validation score obtained was 0.984. Then we used the model with the best training step, to predict target value from the test data; the AUC score obtained was 0.974.
+
+We then presented the data to a LightGBM model. We used both train-validation split and cross-validation to evaluate the model effectiveness to predict 'Class' value, i.e. detecting if a transaction was fraudulent. With the first method we obtained values of AUC for the validation set around 0.974. For the test set, the score obtained was 0.946.
+With the cross-validation, we obtained an AUC score for the test prediction of 0.93.
 
